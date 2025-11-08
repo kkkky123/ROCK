@@ -1,3 +1,5 @@
+import platform
+
 import pytest
 
 from rock.actions import BashAction, CreateBashSessionRequest
@@ -14,6 +16,7 @@ async def test_local_deployment():
     assert not await d.is_alive()
 
 
+@pytest.mark.skipif(platform.system() != "Linux", reason="nohup behavior differs on non-Linux systems")
 async def test_nohup_output_command():
     d = LocalDeployment()
     await d.start()

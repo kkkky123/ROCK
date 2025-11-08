@@ -4,12 +4,9 @@ import concurrent.futures
 import signal
 import threading
 import time
-from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Generic, TypeVar
-
-import ray
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -167,13 +164,17 @@ class RayUtil:
     @staticmethod
     async def get_alive_worker_nodes():
         """Get alive worker nodes in Ray cluster"""
+        import ray
+
         nodes = ray.nodes()
         alive_nodes = [node for node in nodes if node["Alive"]]
         alive_worker_nodes = [node for node in alive_nodes if node["Resources"].get("node:__internal_head__", 0) != 1.0]
         return alive_worker_nodes
 
     @staticmethod
-    async def async_ray_get(ray_future: Sequence[ray.ObjectRef]):
+    async def async_ray_get(ray_future):
         """Async wrapper for ray.get"""
+        import ray
+
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(get_executor(), ray.get, ray_future)
