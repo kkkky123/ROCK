@@ -5,6 +5,7 @@
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
 import { themes as prismThemes } from 'prism-react-renderer';
+import 'dotenv/config';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
@@ -20,7 +21,8 @@ const config = {
   },
 
   // Set the production url of your site here
-  url: 'https://alibaba.github.io',
+  url: process.env.READTHEDOCS_CANONICAL_URL || 'https://alibaba.github.io',
+
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/ROCK/',
