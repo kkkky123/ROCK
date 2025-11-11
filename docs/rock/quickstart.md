@@ -2,7 +2,7 @@
 sidebar_position: 2
 ---
 
-# ROCK Quick Start Guide
+# Getting Started
 
 This guide will demonstrate how to use ROCK to create and manage reinforcement learning environments through complete examples.
 
