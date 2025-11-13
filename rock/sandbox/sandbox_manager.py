@@ -6,21 +6,15 @@ from fastapi import UploadFile
 
 from rock import env_vars
 from rock.actions import (
-    BashAction,
-    BashInterruptAction,
     BashObservation,
-    CloseBashSessionRequest,
     CloseBashSessionResponse,
-    Command,
     CommandResponse,
     CreateBashSessionResponse,
-    CreateSessionRequest,
-    ReadFileRequest,
     ReadFileResponse,
     UploadResponse,
-    WriteFileRequest,
     WriteFileResponse,
 )
+from rock.actions.sandbox.request import Action
 from rock.admin.core.redis_key import ALIVE_PREFIX, alive_sandbox_key, timeout_sandbox_key
 from rock.admin.metrics.decorator import monitor_sandbox_operation
 from rock.admin.proto.response import SandboxStartResponse, SandboxStatusResponse
@@ -30,6 +24,12 @@ from rock.deployments.constants import Status
 from rock.deployments.status import PhaseStatus, ServiceStatus
 from rock.logger import init_logger
 from rock.rocklet import __version__ as swe_version
+from rock.rocklet.proto.request import BashInterruptAction
+from rock.rocklet.proto.request import InternalCloseBashSessionRequest as CloseBashSessionRequest
+from rock.rocklet.proto.request import InternalCommand as Command
+from rock.rocklet.proto.request import InternalCreateSessionRequest as CreateSessionRequest
+from rock.rocklet.proto.request import InternalReadFileRequest as ReadFileRequest
+from rock.rocklet.proto.request import InternalWriteFileRequest as WriteFileRequest
 from rock.sandbox import __version__ as gateway_version
 from rock.sandbox.base_manager import BaseManager
 from rock.sandbox.sandbox_actor import SandboxActor
@@ -231,13 +231,6 @@ class SandboxManager(BaseManager):
                 experiment_id=experiment_id,
             )
 
-    async def execute(self, command: Command) -> CommandResponse:
-        sandbox_actor = await self.async_ray_get_actor(command.container_name)
-        if sandbox_actor is None:
-            raise Exception(f"sandbox {command.container_name} not found to execute")
-        await self._update_expire_time(command.container_name)
-        return await self.async_ray_get(sandbox_actor.execute.remote(command))
-
     async def create_session(self, request: CreateSessionRequest) -> CreateBashSessionResponse:
         sandbox_actor = await self.async_ray_get_actor(request.container_name)
         if sandbox_actor is None:
@@ -246,7 +239,7 @@ class SandboxManager(BaseManager):
         return await self.async_ray_get(sandbox_actor.create_session.remote(request))
 
     @monitor_sandbox_operation()
-    async def run_in_session(self, action: BashAction | BashInterruptAction) -> BashObservation:
+    async def run_in_session(self, action: Action | BashInterruptAction) -> BashObservation:
         sandbox_actor = await self.async_ray_get_actor(action.container_name)
         if sandbox_actor is None:
             raise Exception(f"sandbox {action.container_name} not found to run in session")
@@ -259,6 +252,13 @@ class SandboxManager(BaseManager):
             raise Exception(f"sandbox {request.container_name} not found to close session")
         await self._update_expire_time(request.container_name)
         return await self.async_ray_get(sandbox_actor.close_session.remote(request))
+
+    async def execute(self, command: Command) -> CommandResponse:
+        sandbox_actor = await self.async_ray_get_actor(command.container_name)
+        if sandbox_actor is None:
+            raise Exception(f"sandbox {command.container_name} not found to execute")
+        await self._update_expire_time(command.container_name)
+        return await self.async_ray_get(sandbox_actor.execute.remote(command))
 
     async def read_file(self, request: ReadFileRequest) -> ReadFileResponse:
         sandbox_actor = await self.async_ray_get_actor(request.container_name)

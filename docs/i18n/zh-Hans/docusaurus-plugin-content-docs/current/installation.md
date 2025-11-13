@@ -1,4 +1,8 @@
-# 安装指南
+---
+sidebar_position: 3
+---
+
+# 安装
 
 本文档介绍如何使用 `uv` 和 `pip` 安装和设置 ROCK 开发环境。该项目是一个强化学习开放构建工具包，支持多种组件。
 
@@ -43,7 +47,34 @@ uv sync --all-extras --group test
 
 ## 使用 pip
 
-### 使用 pip 安装
+### 从 pip 源安装
+
+#### 仅核心依赖
+```bash
+pip install rl-rock
+```
+
+#### 管理组件依赖
+```bash
+pip install "rl-rock[admin]"
+```
+
+#### Rocklet 执行环境依赖
+```bash
+pip install "rl-rock[rocklet]"
+```
+
+#### 构建器依赖
+```bash
+pip install "rl-rock[builder]"
+```
+
+#### 安装所有可选依赖
+```bash
+pip install "rl-rock[all]"
+```
+
+### 使用 pip 从源码安装
 
 #### 仅核心依赖
 ```bash

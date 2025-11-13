@@ -36,7 +36,7 @@ ROCK adopts a client-server architecture, supports different levels of isolation
 [API References](https://alibaba.github.io/ROCK/docs/api)
 
 ---
-Intall ROCK with `pip` or source, and start the local admin server:
+**Recommended**: Install from source (using uv). Alternatively, install from PyPI. Start the local admin server:
 
 ```bash
 # Clone repository
@@ -56,6 +56,22 @@ source .venv/bin/activate
 rock admin start
 ```
 
+### PyPI Installation (Recommended for simple testing)
+
+To install ROCK from PyPI (recommended only for simple testing):
+
+```bash
+# Install from PyPI
+pip install rl-rock
+
+# If using the pip runtime environment (for sandbox dependency installation),
+# you may need to set runtime environment type to pip:
+export ROCK_WORKER_ENV_TYPE=pip
+
+# Start admin server
+rock admin start
+```
+
 **Notes**: ROCK depends on Docker and uv tools for environment management.
 
 1. **Python Environment Configuration**: To ensure ROCK can correctly mount the project and virtual environment along with its base Python interpreter, it is strongly recommended to use uv-managed Python environments to create virtual environments rather than system Python. This can be achieved through the `--python-preference only-managed` parameter.
@@ -64,7 +80,9 @@ rock admin start
 
 3. **Dependency Management**: Use the `uv` command to install all dependency groups, ensuring consistency between development, testing, and production environments.
 
-4. **OS Support**: ROCK recommends managing environments on the same operating system, such as managing Linux image environments on a Linux system. However, it also supports cross-operating system level image management, for example, launching Ubuntu images on MacOS. 
+4. **Pip Source Installation**: For pip source installation (e.g., `pip install rl-rock`), you need to set the `ROCK_WORKER_ENV_TYPE=pip` environment variable and ensure network access for the sandbox to install dependencies. See [Configuration Documentation](docs/rock/configuration.md) for more details on runtime environment options and environment variables.
+
+5. **OS Support**: ROCK recommends managing environments on the same operating system, such as managing Linux image environments on a Linux system. However, it also supports cross-operating system level image management, for example, launching Ubuntu images on MacOS. 
 
 ### Using Env Protocol
 ROCK is fully compatible with the GEM protocol, providing standardized environment interfaces:
@@ -178,8 +196,8 @@ observation, reward, terminated, truncated, info = env.step(action)
 # Activate virtual environment
 source .venv/bin/activate
 
-# Start Rock service, local startup
-admin --env local
+# Start Rock service, default local startup
+rock admin start
 ```
 
 > **Service Information**: The ROCK Local Admin service runs by default on `http://127.0.0.1:8080`. You can access this address through your browser to view the management interface.
@@ -233,7 +251,7 @@ Special thanks to:
 
 ---
 
-## 🤝 About [ROCK n ROLL Team]
+## 🤝 About [ROCK & ROLL Team]
 ROCK is a project jointly developed by Taotian Future Living Lab and Alibaba AI Engine Team, with a strong emphasis on pioneering the future of Reinforcement Learning (RL). Our mission is to explore and shape innovative forms of future living powered by advanced RL technologies. If you are passionate about the future of RL and want to be part of its evolution, we warmly welcome you to join us! 
 
 For more information about **ROLL**, please visit:
@@ -245,7 +263,9 @@ Learn more about the ROCK & ROLL Team through our official channels below👇
 <a href="./assets/rock_wechat.png" target="_blank">
   <img src="https://img.shields.io/badge/WeChat-green?logo=wechat" alt="WeChat QR">
 </a>
-
+<a href="./assets/future_lab.png" target="_blank">
+  <img src="https://img.shields.io/twitter/follow/FutureLab2025?style=social" alt="X QR">
+</a>
 
 ---
 

@@ -1,4 +1,8 @@
-# ROCK API 文档
+---
+sidebar_position: 5
+---
+
+# API 参考
 
 本指南详细介绍 ROCK 平台提供的核心 API 服务，包括沙箱环境管理和 GEM 环境交互。
 

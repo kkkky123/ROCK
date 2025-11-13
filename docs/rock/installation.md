@@ -1,4 +1,8 @@
-# Installation Guide
+---
+sidebar_position: 3
+---
+
+# Installation
 
 This document explains how to install and set up the ROCK development environment using both `uv` and `pip`. The project is a Reinforcement Open Construction Kit that supports various components.
 
@@ -44,7 +48,34 @@ uv sync --all-extras --group test
 
 ## Using pip
 
-### Install with pip
+### Install from pip source
+
+#### Core Dependencies Only
+```bash
+pip install rl-rock
+```
+
+#### Admin Component Dependencies
+```bash
+pip install "rl-rock[admin]"
+```
+
+#### Rocklet Execution Environment Dependencies
+```bash
+pip install "rl-rock[rocklet]"
+```
+
+#### Builder Dependencies
+```bash
+pip install "rl-rock[builder]"
+```
+
+#### Install All Optional Dependencies
+```bash
+pip install "rl-rock[all]"
+```
+
+### Install with pip from source code
 
 #### Core Dependencies Only
 ```bash

@@ -1,4 +1,8 @@
-# ROCK 概述
+---
+sidebar_position: 1
+---
+
+# 概览
 
 ROCK (Reinforcement Open Construction Kit) 是一个开源的强化学习环境开发框架，旨在简化强化学习环境的开发、部署和管理流程。
 
