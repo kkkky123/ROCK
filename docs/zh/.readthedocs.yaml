@@ -5,7 +5,7 @@
    tools:
      python: "3"
  sphinx:
-   configuration: conf.py
+   configuration: docs/zh/conf.py
 
  python:
    install:
