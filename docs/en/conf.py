@@ -9,7 +9,7 @@
 project = 'MY_ROCK'
 copyright = '2025, kezhong.ykz'
 author = 'kezhong.ykz'
-release = 'latest'
+release = 'v1.0.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
