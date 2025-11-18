@@ -4,6 +4,7 @@ sphinx-rtd-theme
 sphinx-notfound-page
 sphinx-tabs
 shot-scraper
+myst_parser
 
 sphinx-js
 # Pin it because it fails otherwise
