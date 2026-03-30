@@ -1,14 +1,13 @@
 """Job configuration models aligned with harbor.models.job.config.
 
 Harbor-native fields are serialized to YAML and passed to ``harbor jobs start -c``.
-Rock extension fields control the sandbox lifecycle.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -18,11 +17,14 @@ from rock.sdk.agent.models.orchestrator_type import OrchestratorType
 from rock.sdk.agent.models.trial.config import (
     AgentConfig,
     ArtifactConfig,
-    EnvironmentConfig,
+    RockEnvironmentConfig,
     TaskConfig,
     VerifierConfig,
 )
-from rock.sdk.sandbox.config import SandboxConfig
+
+# ---------------------------------------------------------------------------
+# RetryConfig / OrchestratorConfig
+# ---------------------------------------------------------------------------
 
 
 class RetryConfig(BaseModel):
@@ -125,24 +127,15 @@ DatasetConfig = LocalDatasetConfig | RegistryDatasetConfig
 
 
 class JobConfig(BaseModel):
-    """Job configuration combining Harbor-native fields with Rock extensions.
+    """Job configuration: Rock environment + Harbor-native benchmark fields.
 
-    Harbor-native fields are serialized to YAML and passed to ``harbor jobs start -c``.
-    Rock extension fields control sandbox lifecycle.
+    All Rock sandbox/lifecycle configuration lives in ``environment``.
+    Harbor-native fields (agents, datasets, etc.) are serialized to YAML
+    and passed to ``harbor jobs start -c``.
     """
 
-    # ── Rock extension fields ──
-    sandbox_config: SandboxConfig | None = None
-    setup_commands: list[str] = Field(default_factory=list)
-    file_uploads: list[tuple[str, str]] = Field(
-        default_factory=list,
-        description="Files/dirs to upload before running: [(local_path, sandbox_path), ...]",
-    )
-    sandbox_env: dict[str, str] = Field(
-        default_factory=dict,
-        description="Shell env vars exported before harbor run (OSS keys, API keys, etc.)",
-    )
-    auto_stop_sandbox: bool = False
+    # ── Rock environment (Rock sandbox config + Harbor EnvironmentConfig, not serialized to Harbor YAML) ──
+    environment: RockEnvironmentConfig = Field(default_factory=RockEnvironmentConfig)
 
     # ── Harbor native fields ──
     job_name: str = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d__%H-%M-%S"))
@@ -155,7 +148,6 @@ class JobConfig(BaseModel):
     environment_build_timeout_multiplier: float | None = None
     debug: bool = False
     orchestrator: OrchestratorConfig = Field(default_factory=OrchestratorConfig)
-    environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     verifier: VerifierConfig = Field(default_factory=VerifierConfig)
     metrics: list[MetricConfig] = Field(default_factory=list)
     agents: list[AgentConfig] = Field(default_factory=lambda: [AgentConfig()])
@@ -163,37 +155,25 @@ class JobConfig(BaseModel):
     tasks: list[TaskConfig] = Field(default_factory=list)
     artifacts: list[str | ArtifactConfig] = Field(default_factory=list)
 
-    # ── Rock extension field names (excluded from Harbor YAML) ──
-    _rock_fields: ClassVar[set[str]] = {
-        "sandbox_config",
-        "setup_commands",
-        "file_uploads",
-        "sandbox_env",
-        "auto_stop_sandbox",
-    }
-
     def to_harbor_yaml(self) -> str:
-        """Serialize Harbor-native fields to YAML string.
+        """Serialize Harbor-native fields to YAML for ``harbor jobs start -c``.
 
-        Excludes Rock extension fields and None values so the output
-        can be loaded by ``harbor jobs start -c``.
+        Rock environment fields are excluded. Harbor environment fields
+        (force_build, override_cpus, etc.) are included under ``environment``.
         """
         import yaml
 
-        data = self.model_dump(mode="json", exclude=self._rock_fields, exclude_none=True)
+        data = self.model_dump(mode="json", exclude={"environment"}, exclude_none=True)
+        harbor_env = self.environment.to_harbor_environment()
+        if harbor_env:
+            data["environment"] = harbor_env
         return yaml.dump(data, default_flow_style=False, allow_unicode=True)
 
     @classmethod
-    def from_yaml(cls, path: str, **overrides) -> JobConfig:
-        """Load JobConfig from a Harbor YAML config file.
-
-        Args:
-            path: Path to the YAML file.
-            **overrides: Additional fields to set (e.g., sandbox_config, setup_commands).
-        """
+    def from_yaml(cls, path: str) -> JobConfig:
+        """Load JobConfig from a Harbor YAML config file."""
         import yaml
 
         with open(path) as f:
             data = yaml.safe_load(f)
-        data.update(overrides)
         return cls(**data)

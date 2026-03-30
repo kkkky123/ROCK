@@ -58,8 +58,8 @@ rock/sdk/agent/
     │   └── result.py                # JobResult, JobStatus
     ├── trial/
     │   ├── __init__.py
-    │   ├── config.py                # AgentConfig, EnvironmentConfig, VerifierConfig
-    │   │                            # TaskConfig, ArtifactConfig
+    │   ├── config.py                # AgentConfig, EnvironmentConfig, RockEnvironmentConfig
+    │   │                            # VerifierConfig, TaskConfig, ArtifactConfig
     │   └── result.py                # TrialResult, ExceptionInfo, AgentInfo, ModelInfo
     │                                # AgentResult, VerifierResult, TimingInfo
     └── metric/
@@ -130,15 +130,17 @@ rock/sdk/agent/
 ```
 JobConfig (Pydantic, rock/sdk/agent/models/job/config.py)
 │
-│  ── Rock 扩展字段（不序列化到 Harbor YAML） ──
-├── sandbox_config: SandboxConfig | None   # rock.sdk.sandbox.config
-├── setup_commands: list[str]               # harbor run 前的准备命令
-├── file_uploads: list[tuple[str, str]]     # 上传文件：(local_path, sandbox_path)
-├── sandbox_env: dict[str, str]             # sandbox session 环境变量
-├── auto_stop_sandbox: bool                 # 完成后自动关闭 sandbox
+│  ── Rock environment (Rock sandbox + Harbor env, not serialized to Harbor YAML) ──
+├── environment: RockEnvironmentConfig
+│   ├── (from SandboxConfig) image, memory, cpus, cluster, base_url, startup_timeout, ...
+│   ├── (from EnvironmentConfig) type, force_build, override_cpus, override_memory_mb, ...
+│   ├── env: dict[str, str]            # reuses EnvironmentConfig.env — injected into sandbox session and passed to harbor
+│   ├── setup_commands: list[str]       # commands to run before harbor
+│   ├── file_uploads: list[tuple]       # files to upload: (local_path, sandbox_path)
+│   └── auto_stop: bool                 # close sandbox after completion
 │
-│  ── Harbor 原生字段（序列化到 YAML，传给 harbor CLI） ──
-├── job_name: str                           # 默认时间戳 %Y-%m-%d__%H-%M-%S
+│  ── Harbor native fields (serialized to YAML, passed to harbor CLI) ──
+├── job_name: str                           # default: timestamp %Y-%m-%d__%H-%M-%S
 ├── jobs_dir: Path                          # 输出目录，默认 "jobs"
 ├── n_attempts: int                         # 每个 task 的重试次数
 ├── timeout_multiplier: float               # 全局超时倍率
@@ -158,13 +160,6 @@ JobConfig (Pydantic, rock/sdk/agent/models/job/config.py)
 │   │   ├── wait_multiplier: float
 │   │   ├── min_wait_sec / max_wait_sec: float
 │   └── kwargs: dict[str, Any]
-├── environment: EnvironmentConfig
-│   ├── type: EnvironmentType
-│   ├── import_path: str | None
-│   ├── force_build / delete: bool
-│   ├── override_cpus / memory_mb / storage_mb / gpus
-│   ├── mounts_json: list[dict] | None
-│   ├── env / kwargs: dict
 ├── verifier: VerifierConfig
 │   ├── override_timeout_sec / max_timeout_sec
 │   └── disable: bool
@@ -334,9 +329,9 @@ harbor jobs start -c /tmp/rock_job_xxx.yaml
        │  验证 config 类型，初始化内部状态
        ▼
 2. submit()
-       │  ├─ Sandbox(sandbox_config).start()
-       │  ├─ create_session(session_name, env=sandbox_env)
-       │  ├─ upload file_uploads (fs.upload_dir)
+       │  ├─ Sandbox(environment).start()
+       │  ├─ create_session(session_name, env=environment.env)
+       │  ├─ upload environment.file_uploads (fs.upload_dir)
        │  ├─ upload Harbor YAML config (to_harbor_yaml())
        │  ├─ render bash script (dockerd + setup + harbor)
        │  └─ start_nohup_process(bash script) → pid, tmp_file
@@ -350,7 +345,7 @@ harbor jobs start -c /tmp/rock_job_xxx.yaml
        │      ├─ read each trial's result.json
        │      ├─ TrialResult.from_harbor_json(data)
        │      └─ assemble JobResult
-       │  ├─ if auto_stop_sandbox: sandbox.close()
+       │  ├─ if environment.auto_stop: sandbox.close()
        │  返回 JobResult
        ▼
 4. Return JobResult
@@ -365,10 +360,9 @@ harbor jobs start -c /tmp/rock_job_xxx.yaml
 jobs = []
 for task in task_batch:
     config = JobConfig(
-        sandbox_config=sandbox_cfg,
+        environment=base_env,
         tasks=[task],
         agents=[agent_cfg],
-        ...
     )
     job = Job(config)
     await job.submit()  # 启动后立即返回，不返回 job_id
@@ -433,15 +427,19 @@ class RockJobService(AgenticTaskService):
 
 JobConfig 分为两部分：Harbor 原生字段直接透传给 `harbor jobs start`，Rock 扩展字段控制 sandbox 运行时。
 
-#### Rock 扩展字段（不序列化到 Harbor YAML）
+#### Rock 环境字段（不序列化到 Harbor YAML，统一在 `environment: RockEnvironmentConfig` 内）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `sandbox_config` | `SandboxConfig \| None` | `None` | Rock sandbox 配置 |
-| `setup_commands` | `list[str]` | `[]` | harbor 运行前的准备命令 |
-| `file_uploads` | `list[tuple[str, str]]` | `[]` | 上传文件/目录：(local_path, sandbox_path) |
-| `sandbox_env` | `dict[str, str]` | `{}` | sandbox session 环境变量（OSS keys 等） |
-| `auto_stop_sandbox` | `bool` | `False` | 完成后自动关闭 sandbox |
+| `environment.image` | `str` | `"python:3.11"` | sandbox 镜像 |
+| `environment.memory` | `str` | `"8g"` | 内存限制 |
+| `environment.cpus` | `float` | `2` | CPU 限制 |
+| `environment.cluster` | `str` | `"zb"` | 集群名 |
+| `environment.base_url` | `str` | env var | Rock admin URL |
+| `environment.setup_commands` | `list[str]` | `[]` | harbor 运行前的准备命令 |
+| `environment.file_uploads` | `list[tuple[str, str]]` | `[]` | 上传文件/目录：(local_path, sandbox_path) |
+| `environment.env` | `dict[str, str]` | `{}` | 复用 EnvironmentConfig.env — 注入 sandbox session，同时传给 harbor |
+| `environment.auto_stop` | `bool` | `False` | 完成后自动关闭 sandbox |
 
 #### Harbor 原生字段（核心）
 
@@ -456,7 +454,7 @@ JobConfig 分为两部分：Harbor 原生字段直接透传给 `harbor jobs star
 | `agent_setup_timeout_multiplier` | `float \| None` | `None` | `--agent-setup-timeout-multiplier` |
 | `environment_build_timeout_multiplier` | `float \| None` | `None` | `--environment-build-timeout-multiplier` |
 | `orchestrator` | `OrchestratorConfig` | `{}` | `-n`, `-r`, `--orchestrator` |
-| `environment` | `EnvironmentConfig` | `{}` | `-e`, `--ek`, `--ee` |
+| `environment` | `RockEnvironmentConfig` | `RockEnvironmentConfig()` | `-e`, `--ek`, `--ee` |
 | `agents` | `list[AgentConfig]` | `[AgentConfig()]` | `-a`, `-m`, `--ak`, `--ae` |
 | `datasets` | `list[...]` | `[]` | `-d`, `--dataset` |
 | `tasks` | `list[TaskConfig]` | `[]` | `-p/--path` |
@@ -509,37 +507,30 @@ LocalRegistryInfo(
 ### 4.2 配置示例
 
 ```python
-from rock.sdk.agent import Job, JobConfig, RegistryDatasetConfig, AgentConfig, EnvironmentConfig
-from rock.sdk.agent.models.job.config import OssRegistryInfo
-from rock.sdk.sandbox.config import SandboxConfig
+from rock.sdk.agent import Job, JobConfig, RegistryDatasetConfig, AgentConfig, RockEnvironmentConfig, OssRegistryInfo
 
 config = JobConfig(
-    # ── Rock 扩展 ──
-    sandbox_config=SandboxConfig(
+    environment=RockEnvironmentConfig(
         image="harbor-runner:latest",
         base_url="http://rock-admin:8080",
         cluster="zb",
         memory="16g",
         cpus=4,
-    ),
-    setup_commands=["pip install harbor --quiet"],
-    file_uploads=[
-        ("/local/tasks", "/workspace/tasks"),
-        ("/local/config.yaml", "/workspace/config.yaml"),
-    ],
-    sandbox_env={
-        "OSS_ACCESS_KEY_ID": "xxx",
-        "OSS_ACCESS_KEY_SECRET": "yyy",
-    },
-
-    # ── Harbor 原生（与 Harbor YAML / CLI 一一对应） ──
-    jobs_dir="/workspace/jobs",
-    n_attempts=1,
-    environment=EnvironmentConfig(
-        type="docker",
+        setup_commands=["pip install harbor --quiet"],
+        file_uploads=[
+            ("/local/tasks", "/workspace/tasks"),
+            ("/local/config.yaml", "/workspace/config.yaml"),
+        ],
+        env={
+            "OSS_ACCESS_KEY_ID": "xxx",
+            "OSS_ACCESS_KEY_SECRET": "yyy",
+        },
+        # Harbor advanced fields (optional)
         force_build=True,
         delete=True,
     ),
+    jobs_dir="/workspace/jobs",
+    n_attempts=1,
     agents=[AgentConfig(
         name="terminus-2",
         model_name="hosted_vllm/my-model",
@@ -567,17 +558,10 @@ result = await job.run()
 
 ### 4.3 从 Harbor YAML 加载
 
-已有 Harbor YAML 配置文件可以直接加载，只需补充 Rock 扩展字段：
+YAML 文件中直接写 `environment:` 块，`from_yaml` 原样加载：
 
 ```python
-config = JobConfig.from_yaml(
-    "/path/to/harbor-config.yaml",
-    sandbox_config=SandboxConfig(
-        image="harbor-runner:latest",
-        base_url="http://rock-admin:8080",
-    ),
-    setup_commands=["pip install harbor --quiet"],
-)
+config = JobConfig.from_yaml("/path/to/config.yaml")
 job = Job(config)
 result = await job.run()
 ```
@@ -676,23 +660,21 @@ Harbor 生成的 trial 级 `result.json` 结构：
 ### 6.1 基本用法 — TB2 Benchmark
 
 ```python
-from rock.sdk.agent import Job, JobConfig, RegistryDatasetConfig, AgentConfig
-from rock.sdk.agent.models.job.config import OssRegistryInfo
-from rock.sdk.sandbox.config import SandboxConfig
+from rock.sdk.agent import Job, JobConfig, RegistryDatasetConfig, AgentConfig, RockEnvironmentConfig, OssRegistryInfo
 
 config = JobConfig(
-    sandbox_config=SandboxConfig(
+    environment=RockEnvironmentConfig(
         image="harbor-runner:latest",
         base_url="http://rock-admin:8080",
         cluster="zb",
         memory="16g",
         cpus=4,
+        setup_commands=["pip install harbor --quiet"],
+        env={
+            "OSS_ACCESS_KEY_ID": "xxx",
+            "OSS_ACCESS_KEY_SECRET": "yyy",
+        },
     ),
-    setup_commands=["pip install harbor --quiet"],
-    sandbox_env={
-        "OSS_ACCESS_KEY_ID": "xxx",
-        "OSS_ACCESS_KEY_SECRET": "yyy",
-    },
     agents=[AgentConfig(
         name="terminus-2",
         model_name="hosted_vllm/my-model",
@@ -717,39 +699,39 @@ for trial in result.trial_results:
 ### 6.2 RL 训练集成 — verl Rollout
 
 ```python
-from rock.sdk.agent import Job, JobConfig, AgentConfig, TaskConfig
-from rock.sdk.sandbox.config import SandboxConfig
+from rock.sdk.agent import Job, JobConfig, AgentConfig, TaskConfig, RockEnvironmentConfig
 
 class RockJobService(AgenticTaskService):
     """Rock Job SDK adapter for verl RL training."""
 
     def __init__(self, config: OmegaConf):
         super().__init__(config)
-        self._sandbox_config = SandboxConfig(
+        self._base_env = RockEnvironmentConfig(
             image=config.image,
             base_url=config.rock_base_url,
             cluster=config.cluster,
             memory=config.get("memory", "16g"),
+            setup_commands=["pip install harbor --quiet"],
+            auto_stop=True,
         )
         self._jobs: dict[TaskId, Job] = {}
 
     async def submit_task(self, task_config: AgenticTaskConfig) -> TaskId:
         job_config = JobConfig(
-            sandbox_config=self._sandbox_config,
-            setup_commands=["pip install harbor --quiet"],
-            agents=[AgentConfig(
-                name=task_config.agent_config.scaffold,
-                model_name=f"hosted_vllm/{task_config.llm_config.model_name}",
-                env={
+            environment=self._base_env.model_copy(update={
+                "env": {
                     "LLM_API_KEY": task_config.llm_config.api_key,
                     "LLM_BASE_URL": task_config.infer_callback_url,
                 },
+            }),
+            agents=[AgentConfig(
+                name=task_config.agent_config.scaffold,
+                model_name=f"hosted_vllm/{task_config.llm_config.model_name}",
             )],
             tasks=[TaskConfig(
                 path=f"/workspace/tasks/{task_config.data_config.instance_id}",
             )],
             timeout_multiplier=task_config.runtime_config.task_timeout_sec / 3600,
-            auto_stop_sandbox=True,
         )
 
         job = Job(job_config)
@@ -777,25 +759,24 @@ class RockJobService(AgenticTaskService):
 
 ```python
 import asyncio
-from rock.sdk.agent import Job, JobConfig, AgentConfig, TaskConfig
-from rock.sdk.sandbox.config import SandboxConfig
+from rock.sdk.agent import Job, JobConfig, AgentConfig, TaskConfig, RockEnvironmentConfig
 
 async def run_rollout(task_path, agent_config):
-    """单个 rollout 任务"""
+    """Single rollout task."""
     config = JobConfig(
-        sandbox_config=SandboxConfig(
+        environment=RockEnvironmentConfig(
             image="harbor-runner:latest",
             base_url="http://rock-admin:8080",
             memory="16g",
+            setup_commands=["pip install harbor --quiet"],
+            env={"LLM_API_KEY": "sk-xxx"},
+            auto_stop=True,
         ),
-        setup_commands=["pip install harbor --quiet"],
         tasks=[TaskConfig(path=task_path)],
         agents=[AgentConfig(
             name="terminus-2",
             model_name="hosted_vllm/my-model",
-            env={"LLM_API_KEY": "sk-xxx"},
         )],
-        auto_stop_sandbox=True,
     )
     job = Job(config)
     return await job.run()
@@ -892,6 +873,7 @@ from rock.sdk.agent import (
 
     # 配置
     JobConfig,
+    RockEnvironmentConfig,
     RegistryDatasetConfig,
     LocalDatasetConfig,
     OssRegistryInfo,
@@ -899,7 +881,6 @@ from rock.sdk.agent import (
     OrchestratorConfig,
     RetryConfig,
     AgentConfig,
-    EnvironmentConfig,
     VerifierConfig,
     TaskConfig,
     ArtifactConfig,

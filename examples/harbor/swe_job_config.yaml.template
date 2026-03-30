@@ -1,5 +1,5 @@
-# ── Rock Extension ────────────────────────────────────
-sandbox_config:
+# ── Rock Environment ─────────────────────────────────
+environment:
   base_url: "<your-rock-base-url>"
   xrl_authorization: "<your-xrl-auth-token>"
   image: "<your-harbor-image:tag>"
@@ -8,16 +8,15 @@ sandbox_config:
   cpus: 8
   startup_timeout: 1800
   auto_clear_seconds: 7200
+  auto_stop: false
+  env:
+    OPENAI_API_KEY: "<your-openai-api-key>"
+    OPENAI_BASE_URL: "<your-openai-base-url>"
 
-auto_stop_sandbox: false
-
-# ── Harbor Native ────────
+# ── Harbor Native ────────────────────────────────────
 agents:
   - name: "swe-agent"
     model_name: "custom_openai/<your-model>"
-    env:
-      OPENAI_API_KEY: "<your-openai-api-key>"
-      OPENAI_BASE_URL: "<your-openai-base-url>"
 
 datasets:
   - name: "princeton-nlp/SWE-bench_Verified"
